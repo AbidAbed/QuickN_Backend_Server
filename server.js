@@ -18,7 +18,10 @@ app.use(cookieParser())
 
 // routes
 const authRoutes = require("./routes/authRoutes")
-app.use("/api/v1/auth" , authRoutes) 
+app.use("/api/v1/auth" , authRoutes)
+
+const conversationRoutes = require("./routes/conversationRoutes")
+app.use("/api/v1/conversation" , conversationRoutes)
 
 
 // use custom errorHandler middleware
