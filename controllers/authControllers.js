@@ -1,4 +1,5 @@
 const Joi = require("joi")
+const bcrypt = require("bcrypt")
 const User = require("../models/userModel")
 const createError = require("../utils/createError")
 
@@ -55,6 +56,44 @@ const signUp = async (req , res , next) => {
 
 const signIn = async (req , res , next) => {
 
+    const signInSchema = Joi.object({
+        username : Joi.string().required().min(3),
+        password : Joi.string().required().min(8)
+    })
+
+    const {value , error} = signInSchema.validate(req.body , {abortEarly : false})
+
+    if(error){
+        return next(createError("400" , "Invalid Credentials"))
+    }
+
+    const {username , password} = value
+
+    try {
+        
+        const user = await User.findOne({username}).select("+password")
+
+        if(!user){
+            return next(createError("404" , "User not exist"))
+        }
+
+        const isPasswordMatched = await bcrypt.compare(password , user.password)
+
+        if(!isPasswordMatched){
+            return next(createError("400" , "Incorrect password"))
+        }
+
+        user.password = undefined
+
+        const token = user.createJWT()
+
+        const {isAdmin , isAnnouncing} = user
+
+        res.cookie("access_token" , token , {httpOnly : true}).status(200).json({isAdmin , isAnnouncing})
+
+    } catch (error) {
+        next(error)
+    }
 }
 
 

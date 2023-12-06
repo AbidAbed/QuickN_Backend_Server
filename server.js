@@ -4,7 +4,7 @@ const cookieParser = require("cookie-parser")
 
 const connectDB = require("./db/connectDB")
 
-require("dotenv").config()
+require("dotenv").config() 
 
 const app = express()
 

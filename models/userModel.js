@@ -1,6 +1,7 @@
 const mongoose = require("mongoose")
 const validator = require("validator")
 const bcrypt = require("bcrypt")
+const jwt = require("jsonwebtoken")
 
 
 const userSchema = new mongoose.Schema({
@@ -20,6 +21,14 @@ const userSchema = new mongoose.Schema({
         required : true,
         minlength : 6 ,
         select : false
+    },
+    isAdmin : {
+        type : Boolean,
+        default : false
+    },
+    isAnnouncing:{
+        type : Boolean,
+        default : false        
     }
 } , {timestamps : true})
 
@@ -34,6 +43,12 @@ userSchema.pre("save" , async function(){
     this.password = hashedPassword
 
 })
+
+
+userSchema.methods.createJWT = function(){
+    const token = jwt.sign({userId : this._id , isAdmin : this.isAdmin , isAnnouncing : this.isAnnouncing} , process.env.JWT_SECRET , {expiresIn : process.env.JWT_EXPIRES_TIME})
+    return token
+}
 
 
 const User = mongoose.model("users" , userSchema)
