@@ -64,7 +64,7 @@ const signIn = async (req , res , next) => {
     const {value , error} = signInSchema.validate(req.body , {abortEarly : false})
 
     if(error){
-        return next(createError("400" , "Invalid Credentials"))
+        return next(createError(400 , "Invalid Credentials"))
     }
 
     const {username , password} = value
@@ -74,13 +74,13 @@ const signIn = async (req , res , next) => {
         const user = await User.findOne({username}).select("+password")
 
         if(!user){
-            return next(createError("404" , "User not exist"))
+            return next(createError(404 , "User not exist"))
         }
 
         const isPasswordMatched = await bcrypt.compare(password , user.password)
 
         if(!isPasswordMatched){
-            return next(createError("400" , "Incorrect password"))
+            return next(createError(400 , "Incorrect password"))
         }
 
         user.password = undefined
@@ -89,7 +89,7 @@ const signIn = async (req , res , next) => {
 
         const {isAdmin , isAnnouncing} = user
 
-        res.cookie("access_token" , token , {httpOnly : true}).status(200).json({isAdmin , isAnnouncing})
+        res.cookie("access_token" , token , {httpOnly : true}).status(200).json({user , isAdmin , isAnnouncing , token})
 
     } catch (error) {
         next(error)
@@ -99,4 +99,11 @@ const signIn = async (req , res , next) => {
 
 
 
-module.exports = {signUp , signIn} 
+const checkAuth = async (req , res , next) => {
+    res.send("valid token")
+}
+
+
+
+
+module.exports = {signUp , signIn , checkAuth} 
