@@ -23,6 +23,9 @@ app.use("/api/v1/auth" , authRoutes)
 const conversationRoutes = require("./routes/conversationRoutes")
 app.use("/api/v1/conversation" , conversationRoutes)
 
+const messageRoutes = require("./routes/messageRoutes")
+app.use("/api/v1/message" , messageRoutes) 
+
 
 // use custom errorHandler middleware
 const errorHandler = require("./middlewares/errorHandler")

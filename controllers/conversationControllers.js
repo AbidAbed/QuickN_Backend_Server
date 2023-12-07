@@ -22,7 +22,7 @@ const createConversation = async (req , res , next) => {
 
 
 
-const getUserConversation = async (req , res , next) => {
+const getUserConversations = async (req , res , next) => {
 
     try {
         // find all conversation that the userId param exist inside the members array key  
@@ -35,9 +35,9 @@ const getUserConversation = async (req , res , next) => {
     } catch (error) {
         next(error)
     }
+    
 }
 
 
 
-module.exports = {createConversation , getUserConversation
-}
+module.exports = {createConversation , getUserConversations}
