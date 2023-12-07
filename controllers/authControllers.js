@@ -99,11 +99,23 @@ const signIn = async (req , res , next) => {
 
 
 
-const checkAuth = async (req , res , next) => {
-    res.send("valid token")
+const getUser = async (req , res , next) => {
+    try {
+        
+        const userId = req.query.userId
+        const user = await User.findById(userId)
+
+        if(!user){
+            return next(createError(404 , "User with this id not found"))
+        }
+
+        res.status(200).json(user)
+
+    } catch (error) {
+        next(error)
+    }
 }
 
 
 
-
-module.exports = {signUp , signIn , checkAuth} 
+module.exports = {signUp , signIn , getUser} 
