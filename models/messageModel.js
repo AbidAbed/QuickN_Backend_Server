@@ -10,6 +10,10 @@ const messageSchema = new mongoose.Schema({
     },
     text : {
         type : String        
+    },
+    file : {
+        type : mongoose.Schema.Types.ObjectId,
+        ref : "files"
     }
 } , {timestamps : true})
 
