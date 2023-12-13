@@ -6,7 +6,8 @@ const storage = multer.diskStorage({
         return cb(null , "./public/images")
     },
     filename : function(req , file , cb){
-        return cb(null , `${file.originalname}`)
+        console.log(file.originalname)
+        return cb(null , file.originalname === "blob" ? file.originalname = file.originalname + Math.floor(Math.random() * 100) + ".mp3" : file.originalname)
     }
 })
 

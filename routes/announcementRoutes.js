@@ -7,7 +7,7 @@ const router = Router()
 
 router.post("/addAnnouncement" , verifyAdmin , addAnnouncement)
 
-router.get("/" , getAnnouncements)
+router.get("/" , getAnnouncements) 
 
 
 module.exports = router
