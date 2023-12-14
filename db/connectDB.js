@@ -6,4 +6,5 @@ const connectDB = () => {
             .catch((err) => console.log(`FAILED IN CONNECTION TO THE DATABASE : ${err}`))
 }
 
-module.exports = connectDB
+
+module.exports = connectDB 

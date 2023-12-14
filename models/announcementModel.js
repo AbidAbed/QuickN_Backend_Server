@@ -9,7 +9,9 @@ const announcementSchema = new mongoose.Schema({
     announcementText : {
         type : String,
         required : true
-    }
+    },
+    checkedUsers : [String]
+
 } , {timestamps : true})
 
 
