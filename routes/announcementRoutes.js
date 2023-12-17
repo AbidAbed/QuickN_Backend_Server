@@ -3,6 +3,7 @@ const {addAnnouncement , getAnnouncements} = require("../controllers/announcemen
 const verifyAdmin = require("../middlewares/verifyAdmin")
 const Announcement = require("../models/announcementModel")
 const User = require("../models/userModel")
+const createError = require("../utils/createError")
 
 const router = Router()
 
@@ -32,6 +33,9 @@ router.put("/userChecked/:userId/:announcementId" , async (req , res , next) => 
         const user = await User.findById(userId)
 
         let announcement = await Announcement.findById(announcementId)
+
+        // check if the user already checked this announcement
+        // if(announcement.checkedUsers.includes(user.username)) return next(createError(400 , "user already checked"))
                 
         announcement = await Announcement.findByIdAndUpdate(announcementId , {
             $push : {checkedUsers : user.username}
