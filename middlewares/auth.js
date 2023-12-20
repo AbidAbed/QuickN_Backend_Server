@@ -21,7 +21,7 @@ const auth = async (req , res , next) => {
         }
 
         // if everything ok . create a key inside the req object contain the payload obj that contains all response keys
-        req.user = decodedToken
+        req.userId = decodedToken.userId
 
         next()
 

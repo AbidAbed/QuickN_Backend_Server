@@ -29,11 +29,19 @@ const signUp = async (req , res , next) => {
             return next(createError(500 , "User already exist"))
         }
 
+
+
         const user = new User({
             username ,
             email ,
             password
         })
+
+        const salt = await bcrypt.genSalt(10)
+
+        const hashedPassword = await bcrypt.hash(user.password , salt)
+
+        user.password = hashedPassword
 
         await user.save()
 
@@ -102,7 +110,7 @@ const signIn = async (req , res , next) => {
 const getUser = async (req , res , next) => {
     try {
         
-        const userId = req.query.userId
+        const userId = req.params.userId
         const user = await User.findById(userId)
 
         if(!user){
@@ -118,4 +126,39 @@ const getUser = async (req , res , next) => {
 
 
 
-module.exports = {signUp , signIn , getUser} 
+
+const updateUserProfile = async (req , res , next) => {
+
+    if(req.userId !== req.params.userId) return next(createError(401 , "You can only update your profile"))
+
+    try {
+        
+        let {username , email , password , avatar} = req.body
+
+
+        if(password){
+            password = await bcrypt.hash(password , 10)
+        }
+
+        const user = await User.findByIdAndUpdate(req.params.userId , {
+            $set : {
+                username ,
+                email,
+                password ,
+                avatar
+            }
+        }, {new : true})
+
+
+        user.password = undefined
+        
+        res.status(200).json(user)
+
+    } catch (error) {
+        next(error)
+    }
+}
+
+
+
+module.exports = {signUp , signIn , getUser , updateUserProfile} 

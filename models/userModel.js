@@ -22,6 +22,9 @@ const userSchema = new mongoose.Schema({
         minlength : 6 ,
         select : false
     },
+    avatar : {
+        type : String      
+    },
     isAdmin : {
         type : Boolean,
         default : false
@@ -34,15 +37,15 @@ const userSchema = new mongoose.Schema({
 
 
 
-userSchema.pre("save" , async function(){
+// userSchema.pre("save" , async function(){
 
-    if(!this.isModified("password")) return
+//     if(!this.isModified("password")) return
     
-    const salt = await bcrypt.genSalt(10)
-    const hashedPassword = await bcrypt.hash(this.password , salt)
-    this.password = hashedPassword
+//     const salt = await bcrypt.genSalt(10)
+//     const hashedPassword = await bcrypt.hash(this.password , salt)
+//     this.password = hashedPassword
 
-})
+// })
 
 
 userSchema.methods.createJWT = function(){

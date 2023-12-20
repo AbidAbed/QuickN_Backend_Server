@@ -14,6 +14,10 @@ const messageSchema = new mongoose.Schema({
     file : {
         type : mongoose.Schema.Types.ObjectId,
         ref : "files"
+    },
+    groupId : {
+        type : mongoose.Schema.Types.ObjectId,
+        ref : "groups"
     }
 } , {timestamps : true})
 

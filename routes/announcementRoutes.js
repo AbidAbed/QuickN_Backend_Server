@@ -35,10 +35,10 @@ router.put("/userChecked/:userId/:announcementId" , async (req , res , next) => 
         let announcement = await Announcement.findById(announcementId)
 
         // check if the user already checked this announcement
-        // if(announcement.checkedUsers.includes(user.username)) return next(createError(400 , "user already checked"))
+        if(announcement.checkedUsers.includes(user._id)) return next(createError(400 , "user already checked"))
                 
         announcement = await Announcement.findByIdAndUpdate(announcementId , {
-            $push : {checkedUsers : user.username}
+            $push : {checkedUsers : user._id}
         },{new : true})
 
         res.status(200).json(announcement)

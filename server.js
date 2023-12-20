@@ -56,6 +56,9 @@ app.use("/api/v1/message" , messageRoutes)
 const announcementRoutes = require("./routes/announcementRoutes")
 app.use("/api/v1/announcement" , announcementRoutes)
 
+const groupRoutes = require("./routes/groupRoutes")
+app.use("/api/v1/group" , groupRoutes)
+
 
 // use custom errorHandler middleware
 const errorHandler = require("./middlewares/errorHandler")

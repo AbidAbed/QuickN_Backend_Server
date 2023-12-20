@@ -2,19 +2,30 @@ const mongoose = require("mongoose")
 
 
 const groupSchema = new mongoose.Schema({
-    members :{
-     type : Array
+    groupName : {
+        type : String,
+        required : true,
+        unique : true
     },
-    messages : {
-        type : Array
+    groupCreatorId : {
+        type : String
     },
-    createdBy : {
-        type : mongoose.Schema.Types.ObjectId,
-        ref : "users"
-    } 
+    // will be an array of objects that each object contain user id 
+    groupMembers : {
+        type : [String]
+    },
+    groupMessages : [{
+        type : mongoose.Schema.Types.ObjectId ,
+        ref : "messages"
+    }],
+    conversationId : {
+        type : String
+    }
 }, {timestamps : true})
 
 
+
 const Group = mongoose.model("groups" , groupSchema)
+
 
 module.exports = Group

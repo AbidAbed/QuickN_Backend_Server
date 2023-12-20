@@ -12,7 +12,7 @@ router.post("/" , newMessage)
 
 router.get("/:conversationId" , getMessagesInsideConversation)
 
-
+ 
 router.post("/upload" , upload.single("file")  , async (req , res , next) => {
 
     // let filename = req.file.originalname === "blob" ? req.file.originalname = req.file.originalname + Math.floor(Math.random() * 100) + ".mp3" : req.file.originalname
@@ -43,21 +43,30 @@ router.post("/upload" , upload.single("file")  , async (req , res , next) => {
 
 
 
-// router.post("/upload/voice" , upload.single("file")  , async (req , res , next) => {
+router.post("/upload/profilePic" , upload.single("file")  , async (req , res , next) => {
 
-//     try {
+    try {
 
-//         const newFile = new File(req.body)  
+        console.log(req.body)
+        
+        const file = {
+            filename : req.file.originalname,   
+            path : req.file.path 
+        }
 
-//         await newFile.save()
+        console.log(file)
 
-//         res.status(201).json(newFile)
+        const newFile = new File(file)   
 
-//     } catch (error) {
-//         next(error)
-//     }
+        await newFile.save()
 
-// })
+        res.status(201).json(newFile)
+
+    } catch (error) {
+        next(error)
+    }
+
+})
 
 
 
