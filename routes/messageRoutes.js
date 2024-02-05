@@ -1,81 +1,352 @@
-const {Router} = require("express")
-const {newMessage , getMessagesInsideConversation , getUserFilesInsideMessage , getFile} = require("../controllers/messageControllers")
-const upload = require("../middlewares/multer")
-const File = require("../models/fileModel")
+const { Router } = require("express");
+const {
+  newMessage,
+  getMessagesInsideConversation,
+  getUserFilesInsideMessage,
+  getFile,
+  getBinaryFile,
+  searchChat,
+  updateMessage,
+  deleteMessage,
+  getFileByAdmin,
+  discardUserFiles,
+  discardUserFile,
+} = require("../controllers/messageControllers");
+const { upload, uploadProfileImg } = require("../middlewares/multer");
+const File = require("../models/fileModel");
+const Message = require("../models/messageModel");
+const auth = require("../middlewares/auth");
+const Conversation = require("../models/conversationModel");
+const mongoose = require("mongoose");
 
+// post /upload reqs
+//------------------------------------------------------
+const { pdf } = require("pdf-to-img");
+const fs = require("fs");
+const dfs = require("fs").promises;
 
-const router = Router()
+const { promisify } = require("util");
+const libre = require("libreoffice-convert");
 
+libre.convertAsync = require("util").promisify(libre.convert);
 
-router.post("/" , newMessage)   
+const staticFolder = require("../pathConfig");
+const verifyAdmin = require("../middlewares/verifyAdmin");
+// -----------------------------------------------------
 
+const router = Router();
 
-router.get("/:conversationId" , getMessagesInsideConversation)
+router.post("/", auth, newMessage);
 
- 
-router.post("/upload" , upload.single("file")  , async (req , res , next) => {
+router.get("/:conversationId", auth, getMessagesInsideConversation);
 
-    // let filename = req.file.originalname === "blob" ? req.file.originalname = req.file.originalname + Math.floor(Math.random() * 100) + ".mp3" : req.file.originalname
-    // let path = req.file.originalname.includes("blob") ? req.file.path = `public/images/${filename}` : req.file.path
-
-    const file = {
-        filename : req.file.originalname,   
-        path : req.file.path
+router.post("/createFileObj", auth, async (req, res, next) => {
+  try {
+    if (!req.body.filename) {
+      res.status(400).send();
+      return;
     }
 
-    // console.log(filename)
-    // console.log(path)
+    const newFile = new File({
+      filename: req.body.filename,
+      path: "",
+      createdName: "",
+      type: "",
+      extension: "",
+      numberOfPages: 0,
+      isUploading: true,
+    });
 
-    try {
+    await newFile.save();
 
-        const newFile = new File(file)  
+    res.status(201).json(newFile);
+  } catch (error) {
+    next(error);
+  }
+});
 
-        await newFile.save()
+router.post("/upload", auth, upload.single("file"), async (req, res, next) => {
+  // let filename = req.file.originalname === "blob" ? req.file.originalname = req.file.originalname + Math.floor(Math.random() * 100) + ".wav" : req.file.originalname
+  // let path = req.file.originalname.includes("blob") ? req.file.path = `public/images/${filename}` : req.file.path
+  try {
+    let isCanceled = false;
+    if (!req.file) {
+      res.status(400).send({ file: "file is required" });
+      return;
+    } else {
+      req.socket.on("close", function () {
+        // code to handle connection abort
+        isCanceled = true;
+      });
 
-        res.status(201).json(newFile)
+      setTimeout(async () => {
+        isCanceled = true;
+        const file = await File.findOneAndUpdate(
+          { _id: req.body.fileId },
+          { isUploaded: false, isUploading: false }
+        );
+        res.status(400).send();
+        next();
+      }, 1000);
 
-    } catch (error) {
-        next(error)
-    } 
-
-})
-
-
-
-
-router.post("/upload/profilePic" , upload.single("file")  , async (req , res , next) => {
-
-    try {
-
-        console.log(req.body)
-        
-        const file = {
-            filename : req.file.originalname,   
-            path : req.file.path 
+      let numberOfPages = 0;
+      if (
+        req.file.originalname.toLocaleLowerCase().includes("ppt") ||
+        req.file.originalname.toLocaleLowerCase().includes("pptx") ||
+        req.file.originalname.toLocaleLowerCase().includes("docx") ||
+        req.file.originalname.toLocaleLowerCase().includes("doc") ||
+        req.file.originalname.toLocaleLowerCase().includes("xlsx") ||
+        req.file.originalname.toLocaleLowerCase().includes("xls") ||
+        req.file.originalname.toLocaleLowerCase().includes("pdf")
+      ) {
+        if (isCanceled) {
+          res.status(400).send();
+          return;
         }
+        if (
+          !fs.existsSync(
+            `${staticFolder}\\
+                ${req.file.filename.split(".")[0]}`
+          )
+        )
+          fs.mkdirSync(`${staticFolder}\\${req.file.filename.split(".")[0]}`);
 
-        console.log(file)
+        if (isCanceled) {
+          res.status(400).send();
+          return;
+        }
+        if (!req.file.mimetype.includes("pdf")) {
+          const docxBuf = await dfs.readFile(
+            `${staticFolder}\\uploads\\${req.file.filename}`
+          );
 
-        const newFile = new File(file)   
+          // Convert it to pdf format with undefined filter (see Libreoffice docs about filter)
+          let pdfBuf = await libre.convertAsync(docxBuf, ".pdf", undefined);
 
-        await newFile.save()
+          // Here in done you have pdf file which you can save or transfer in another stream
+          if (isCanceled) {
+            res.status(400).send();
+            return;
+          }
 
-        res.status(201).json(newFile)
+          await dfs.writeFile(
+            `${staticFolder}\\generatedPdfs\\${
+              req.file.filename.split(".")[0]
+            }.pdf`,
+            pdfBuf
+          );
+        }
+        let counter = 1;
+        if (isCanceled) {
+          res.status(400).send();
+          return;
+        }
+        const document = await pdf(
+          `${staticFolder}\\${
+            req.file.mimetype.includes("pdf")
+              ? `uploads\\${req.file.filename}`
+              : `generatedPdfs\\${req.file.filename.split(".")[0]}.pdf`
+          }`,
+          { scale: 1 }
+        );
+        if (isCanceled) {
+          res.status(400).send();
+          return;
+        }
+        for await (const image of document) {
+          if (isCanceled) {
+            res.status(400).send();
+            return;
+          }
+          await dfs.writeFile(
+            `${staticFolder}\\${
+              req.file.filename.split(".")[0]
+            }\\${counter}.png`,
+            image
+          );
+          // result.push(`${req.file.filename.split(".")[0]}\\${counter}.png`);
+          counter++;
+          numberOfPages++;
+        }
+        if (isCanceled) {
+          res.status(400).send();
+          return;
+        }
+        if (!req.file.mimetype.includes("pdf"))
+          fs.unlink(
+            `${staticFolder}\\generatedPdfs\\${
+              req.file.filename.split(".")[0]
+            }.pdf`,
+            (err) => {
+              if (err) {
+                res.status(400).send();
+              }
+            }
+          );
+      } else {
+        numberOfPages = 0;
+      }
 
-    } catch (error) {
-        next(error)
+      if (isCanceled) {
+        res.status(400).send();
+        return;
+      }
+
+      // console.log(req.file.mimetype.includes("webm"));
+      if (
+        !req.file.originalname.toLocaleLowerCase().includes("ppt") &&
+        !req.file.originalname.toLocaleLowerCase().includes("pptx") &&
+        !req.file.originalname.toLocaleLowerCase().includes("docx") &&
+        !req.file.originalname.toLocaleLowerCase().includes("doc") &&
+        !req.file.originalname.toLocaleLowerCase().includes("xlsx") &&
+        !req.file.originalname.toLocaleLowerCase().includes("xls") &&
+        !req.file.originalname.toLocaleLowerCase().includes("pdf") &&
+        !req.file.originalname.toLocaleLowerCase().includes("mp4") &&
+        !req.file.originalname.toLocaleLowerCase().includes("png") &&
+        !req.file.originalname.toLocaleLowerCase().includes("jpg") &&
+        !req.file.originalname.toLocaleLowerCase().includes("jpeg") &&
+        !req.file.mimetype.includes("webm")
+      ) {
+        res.status(400).send({ msg: "File is not allowed" });
+        return;
+      }
+
+      if (isCanceled) {
+        res.status(400).send();
+        return;
+      }
+
+      // const newFile = new File({
+      //   createdName: req.file.filename.split(".")[0],
+      //   filename: req.file.originalname.split(".")[0],
+      //   path: req.file.path
+      //     .substring(req.file.path.search("\\public") + 7)
+      //     .split(".")[0],
+      //   type: req.file.mimetype.includes("webm")
+      //     ? "wav"
+      //     : req.file.mimetype.split("/")[1],
+      //   numberOfPages: numberOfPages,
+      //   extension: req.file.mimetype.includes("webm")
+      //     ? "wav"
+      //     : req.file.originalname.split(".")[1],
+      // });
+
+      if (isCanceled) {
+        res.status(400).send();
+        return;
+      }
+
+      //original file object
+      const ogFile = await File.findOne({ _id: req.body.fileId });
+
+      console.log(ogFile, req.body.fileId);
+
+      if (ogFile.isUploading && !ogFile.isUploaded) {
+        const updatedFileObj = await File.findByIdAndUpdate(req.body.fileId, {
+          numberOfPages: numberOfPages,
+          extension: req.file.mimetype.includes("webm")
+            ? "wav"
+            : req.file.originalname.split(".")[1],
+          isUploading: false,
+          isUploaded: true,
+          createdAt: new Date().toISOString(),
+        });
+
+        const fileMsg = await Message.findOne({ file: updatedFileObj._id });
+        fileMsg.createdAt = updatedFileObj.createdAt;
+        await fileMsg.save();
+        res.status(200).json(fileMsg);
+        return;
+      } else {
+        res.status(200).send(ogFile);
+        return;
+      }
     }
+  } catch (err) {
+    console.log(err);
+    res.status(500).send();
+  }
 
-})
+  //   const file = {
+  //     filename: req.file.originalname,
+  //     path: req.file.path,
+  //   };
 
+  //   // //console.log(filename)
+  //   // //console.log(path)
 
+  //   try {
+  //     const newFile = new File(file);
 
-router.get("/getFileInMsg/:msgId" , getUserFilesInsideMessage)
+  //     await newFile.save();
 
- 
+  //     res.status(201).json(newFile);
+  //   } catch (error) {
+  //     next(error);
+  //   }
+});
 
-router.get("/getFile/:fileId" , getFile)
+//might need edit
+router.post(
+  "/upload/profilePic",
+  auth,
+  uploadProfileImg.single("file"),
+  async (req, res, next) => {
+    try {
+      if (req.file === null)
+        return next(createError(400, "file type not allowed"));
 
+      const newFile = await new File({
+        createdName: req.file.filename.split(".")[0],
+        filename: req.file.originalname,
+        path: req.file.path
+          .substring(req.file.path.search("\\public") + 7)
+          .split(".")[0],
+        type: req.file.mimetype.split("/")[1],
+        numberOfPages: 0,
+        extension: req.file.originalname.split(".")[1],
+      }).save();
 
+      res.status(201).json(newFile);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
-module.exports = router
+router.get("/getFileInMsg/:msgId", auth, getUserFilesInsideMessage);
+
+router.get("/getFile/:fileId", auth, getFile);
+
+router.get("/file/binary", getBinaryFile);
+
+router.put("/:conversationId/:msgId", verifyAdmin, updateMessage);
+
+router.delete("/:conversationId/:msgId", verifyAdmin, deleteMessage);
+
+router.get("/admin/file/:fileId", verifyAdmin, getFileByAdmin);
+
+//Discards files that the user has uploaded but didn't upload successfully
+router.delete("/file/uploading/discard", discardUserFiles);
+
+// router.delete("/deleteAllMsg" , async (req , res , next) => {
+//     try {
+//         await Message.deleteMany()
+//         res.status(200).json({msg : "deleted"})
+//     } catch (error) {
+//         next(error)
+//     }
+// })
+
+// router.delete("/deleteChatFiles" , async (req , res , next) => {
+//     try {
+//         await File.deleteMany()
+//     } catch (error) {
+//         next(error)
+//     }
+// })
+
+router.delete("/file/singleFile/uploading/discard", discardUserFile);
+router.get("/users/search", auth, searchChat);
+
+module.exports = router;

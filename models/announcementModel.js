@@ -1,20 +1,33 @@
-const mongoose = require("mongoose")
+const mongoose = require("mongoose");
 
-
-const announcementSchema = new mongoose.Schema({
-    announcementTitle : {
-        type : String,
-        required : true
+const announcementSchema = new mongoose.Schema(
+  {
+    announcementTitle: {
+      type: String,
+      required: true,
     },
-    announcementText : {
-        type : String,
-        required : true
+    announcementText: {
+      type: String,
+      required: true,
     },
-    checkedUsers : [String]
+    checkedUsers: [
+      {
+        userId: {
+          type: String,
+        },
+        username: {
+          type: String,
+        },
+        checkedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+  },
+  { timestamps: true }
+);
 
-} , {timestamps : true})
+const Announcement = mongoose.model("announcements", announcementSchema);
 
-
-const Announcement = mongoose.model("announcements" , announcementSchema)
-
-module.exports = Announcement
+module.exports = Announcement;

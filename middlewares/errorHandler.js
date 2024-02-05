@@ -6,6 +6,11 @@ const errorHandler = (err , req , res , next) => {
         msg : err.message || "Somthing went wrong"
     }
 
+    if(err.name === "CastError"){
+        defaultErrorObj.msg = `Resource with this id not found `,
+        defaultErrorObj.statusCode = 404
+    }
+
     if(err.code && err.code === 11000){
         defaultErrorObj.statusCode = 500
         defaultErrorObj.msg = "user already exist"

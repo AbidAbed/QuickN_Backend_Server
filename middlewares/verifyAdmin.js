@@ -22,14 +22,15 @@ const verifyAdmin = (req , res , next) => {
                 return next(createError(403 , "Invalid token , access forbiden"))
             }
     
-            const {isAdmin , isAnnouncing} = decodedToken
+            const {isAdmin , isAnnouncing, userId} = decodedToken
             
             // after we verify the token if the isAdmin , isAnnouncing keys from the payload object are false
             if(!isAdmin || !isAnnouncing) return next(createError(401 , "Access denied"))
     
             req.isAdmin = isAdmin
             req.isAnnouncing = isAnnouncing
-    
+
+            req.userId = userId
             next()
 
         })

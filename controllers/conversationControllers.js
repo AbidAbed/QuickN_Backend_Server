@@ -1,43 +1,41 @@
-const Conversation = require("../models/conversationModel")
+const Conversation = require("../models/conversationModel");
 
+const createConversation = async (req, res, next) => {
+  const { senderId, receiverId } = req.body;
 
-const createConversation = async (req , res , next) => {
+  try {
+    const conversation = new Conversation({
+      members: [senderId, receiverId],
+    });
 
-    const {senderId , receiverId} = req.body
+    await conversation.save();
 
-    try {
+    res.status(201).json(conversation);
+  } catch (error) {
+    next(error);
+  }
+};
 
-        const conversation = new Conversation({
-            members : [senderId , receiverId]
-        })
+const getUserConversations = async (req, res, next) => {
+  try {
+    // find all conversation that the userId param exist inside the members array key
 
-        await conversation.save()
-        res.status(201).json(conversation)
+    let userConversations = await Conversation.find({
+      members: req.params.userId,
+    });
 
-    } catch (error) {
-        next(error)
-    }
-}
+    userConversations = userConversations.map((userConver) => {
+      return {
+        ...userConver._doc,
+        isUnread: !userConver.readBy.includes(req.userId),
+      };
+    });
 
+    // console.log(userConversations);
+    res.status(200).json(userConversations);
+  } catch (error) {
+    next(error);
+  }
+};
 
-
-
-const getUserConversations = async (req , res , next) => {
-
-    try {
-        // find all conversation that the userId param exist inside the members array key  
-        const userConversations = await Conversation.find({
-            members : {$in : [req.params.userId]}
-        })
-
-        res.status(200).json(userConversations)
-
-    } catch (error) {
-        next(error)
-    }
-    
-}
-
-
-
-module.exports = {createConversation , getUserConversations}
+module.exports = { createConversation, getUserConversations };
