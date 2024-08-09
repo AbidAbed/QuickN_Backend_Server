@@ -18,10 +18,13 @@ const createGroup = async (req, res, next) => {
       !addedGroupMembers.length ||
       addedGroupMembers.length === 0
     ) {
-      res.status(400).send();
+      res.status(400).send({msg : "empty group fields"});
       return;
     }
 
+    if(groupName.length > 25) return res.status(400).send({msg : "group name must be less than 25 character"});
+
+    
     const user = await User.findById(creatorId);
 
     const users = await Promise.all(
@@ -57,13 +60,16 @@ const createGroup = async (req, res, next) => {
     });
 
     await conversation.save();
-    await newGroup.save();
+    await newGroup.save(); 
 
     res.status(201).json({ newGroup, conversation });
   } catch (error) {
     next(error);
-  }
+  } 
 };
+
+
+
 
 const updateGroup = async (req, res, next) => {
   const { membersId, newGroupName, avatar } = req.body;
@@ -93,10 +99,10 @@ const updateGroup = async (req, res, next) => {
     //     )
     //   );
 
-    if (!membersId && !newGroupName)
-      return next(
-        createError(401, "memberId or newGroupName at least must be provided")
-      );
+    // if (!membersId && !newGroupName)
+    //   return next(
+    //     createError(401, "memberId or newGroupName at least must be provided")
+    //   );
 
     if (membersId && (!membersId.length || membersId.length === 0)) {
       return next(createError(400, "membersId must be a non empty array"));
@@ -166,6 +172,9 @@ const updateGroup = async (req, res, next) => {
   }
 };
 
+
+
+
 const sendMsgInGroup = async (req, res, next) => {
   try {
     const { groupId, userId } = req.params;
@@ -200,6 +209,9 @@ const sendMsgInGroup = async (req, res, next) => {
     next(error);
   }
 };
+
+
+
 
 const freezGroup = async (req, res, next) => {
   const { conversationId } = req.params;
@@ -263,6 +275,8 @@ const getAllMessagesInsideGroup = async (req, res, next) => {
   }
 };
 
+
+
 const removeSingleUser = async (req, res, next) => {
   try {
     const { conversationId, userId } = req.body;
@@ -291,22 +305,16 @@ const removeSingleUser = async (req, res, next) => {
 
     await group.save();
 
-    //console.log(conversationId,newGroupMembers, group.groupMembers);
-
-    // const updatedGroup = await Group.updateOne(
-    //   { conversatioId: conversationId, groupMembers: userId },
-    //   { groupMembers: newGroupMembers }
-    // );
-
-    // //console.log(updatedGroup);
-
     if (group && updatedConversationMembers) res.status(200).send();
     else res.status(400).send();
+    
   } catch (err) {
     //console.log(err);
     res.status(500);
   }
 };
+
+
 module.exports = {
   createGroup,
   updateGroup,

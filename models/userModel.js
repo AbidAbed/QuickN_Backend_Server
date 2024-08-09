@@ -3,12 +3,14 @@ const validator = require("validator");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
+
 const userSchema = new mongoose.Schema(
   {
     username: {
       type: String,
       required: true,
       unique: true,
+      trim : true
     },
     email: {
       type: String,
@@ -33,6 +35,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    adminOfAdmins : {
+      type: Boolean,
+      default: false,
+    },
     isBlocked: {
       type: String,
       default: "false",
@@ -44,9 +50,29 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: Date.now(),
     },
+    isOnline : {
+      type : Boolean ,
+      default : false
+    },
+    phoneNumber: {
+      type: String,
+      validate: {
+        validator: function(v) {
+          return /^(07)[0-9]{8}$/.test(v);
+        },
+        message: props => `${props.value} is not a valid phone number starting with "07"!`
+      }
+    },
+    contactList: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }]
   },
   { timestamps: true }
 );
+
+
+
 
 // userSchema.pre("save" , async function(){
 

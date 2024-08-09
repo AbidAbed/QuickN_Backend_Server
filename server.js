@@ -3,6 +3,11 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const bodyParser = require('body-parser');
 
+const mongoSanitize = require("express-mongo-sanitize")
+const helmet = require("helmet")
+const xss = require("xss-clean")
+const {rateLimit} = require("express-rate-limit")
+
 const connectDB = require("./db/connectDB");
 
 //library for debugging 
@@ -27,6 +32,26 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(cors());
 app.use(cookieParser());
+
+
+// security middlwares
+// to prevent no-sql injection 
+// add extra secure headers , protect the website from cross site scripting (xss)
+app.use(mongoSanitize())
+app.use(helmet())
+app.use(xss())
+
+
+// to limit our req rate , could be used for specific routes
+// const limit = rateLimit({
+//   windowMs : 10 * 60 * 1000 ,
+//   max : 1 
+// })
+// app.use(limit)
+
+
+
+
 // app.use('/public', express.static(path.join(__dirname, 'public')));
 
 // api for download files from client side
@@ -48,6 +73,7 @@ app.get("/download/:filename", (req, res) => {
   }
 });
 
+
 // routes
 const authRoutes = require("./routes/authRoutes");
 app.use("/api/v1/auth", authRoutes);
@@ -67,6 +93,8 @@ app.use("/api/v1/group", groupRoutes);
 // use custom errorHandler middleware
 const errorHandler = require("./middlewares/errorHandler");
 app.use(errorHandler);
+
+
 
 const PORT = process.env.PORT || 5000;
 

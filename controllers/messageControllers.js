@@ -1,21 +1,29 @@
 const Message = require("../models/messageModel");
 const File = require("../models/fileModel");
-
+const rimraf = require('rimraf');
 const staticFolder = require("../pathConfig");
 const Group = require("../models/groupModel");
 const User = require("../models/userModel");
 const Conversation = require("../models/conversationModel");
 const fs = require("fs");
 const { default: mongoose } = require("mongoose");
+const createError = require("../utils/createError");
+const { decryptMessage , encryptMessage , generateEncryptionKey} = require("../utils/messageEncryption");
 
+
+
+// prev one
 const newMessage = async (req, res, next) => {
+
   try {
-    const { sender, text, conversationId, file } = req.body;
+
+    const { sender, text, conversationId, file , hiddenFor } = req.body;
 
     if (!sender || text === undefined || !conversationId) {
       res.status(400).send();
       return;
     }
+
 
     /////////////////////////////////////////////////////////////////////////////////
     const conversationDoc = await Conversation.findOne({ _id: conversationId });
@@ -24,63 +32,62 @@ const newMessage = async (req, res, next) => {
       _id: conversationId,
     });
 
+
     const users = await Promise.all(
       conversationDoc.members.map((memberUser) =>
         User.findOne({ _id: memberUser })
       )
     );
 
-    //console.log(users);
 
     const pushedUsers = users.filter((usr) => {
       return usr.lastViewedConversationId === msgConverstion._id.toString();
     });
 
-    //console.log(pushedUsers);
-
-    msgConverstion.readBy = [];
-
-    pushedUsers.map((pUsr) => msgConverstion.readBy.push(pUsr._id.toString()));
-
-    await msgConverstion.save();
 
     /////////////////////////////////////////////////////////////////////////////////
     if (conversationDoc.isGroup) {
+
       if (!conversationDoc.members.includes(sender)) {
         res.status(401).send();
         return;
       }
 
-      const newMessage = new Message({ sender, text, conversationId, file });
+      // if the user is an admin and there is a hidden users array
+      const user = await User.findOne({ _id: req.userId })
 
-      await newMessage.save();
-      // $pullAll
+      let newMessage = { sender, text, conversationId, file };
 
-      // const groupConversatioPulled = await Conversation.findOneAndUpdate(
-      //   {
-      //     _id: conversationId,
-      //   },
-      //   { $set: { readBy: null } }
-      // );
+      if (user.isAdmin && hiddenFor.length > 0) {
+        // to check that there is no duplicated array values
+        const uniqueHiddenFor = Array.from(new Set(hiddenFor))
+        newMessage.hiddenFor = uniqueHiddenFor
+      }else{
+        newMessage.hiddenFor = []
+      }
 
-      // //console.log(111111112222, groupConversatioPulled);
+      // conversationDoc.readBy.push([...filteredMembers])
+      await conversationDoc.save()
 
-      // const groupConversation = await Conversation.findOneAndUpdate(
-      //   {
-      //     _id: conversationId,
-      //   },
-      //   {
-      //     readBy: sender,
-      //   },
-      //   { overwrite: true }
-      // );
+      const newMsg = new Message(newMessage)
+      await newMsg.save()
+
 
       if (!msgConverstion) {
         res.status(400).send();
         return;
       }
-      res.status(201).json(newMessage);
+
+      res.status(201).json(newMsg);
+
     } else {
+
+      msgConverstion.readBy = [];
+
+      pushedUsers.map((pUsr) => msgConverstion.readBy.push(pUsr._id.toString()));
+
+      await msgConverstion.save();
+
       const newMessage = new Message({ sender, text, conversationId, file });
 
       await newMessage.save();
@@ -93,8 +100,86 @@ const newMessage = async (req, res, next) => {
   }
 };
 
+// const newMessage = async (req, res, next) => {
+//   try {
+//     const { sender, text, conversationId, file, hiddenFor } = req.body;
+
+//     if (!sender || text === undefined || !conversationId) {
+//       res.status(400).send();
+//       return;
+//     }
+
+//     // Encrypt the message text
+//     const encryptedText = await encryptMessage(text);
+
+//     // Get conversation document
+//     const conversationDoc = await Conversation.findOne({ _id: conversationId });
+//     const msgConverstion = await Conversation.findOne({
+//       _id: conversationId,
+//     });
+
+//     // Get users who are part of the conversation
+//     const users = await Promise.all(
+//       conversationDoc.members.map((memberUser) =>
+//         User.findOne({ _id: memberUser })
+//       )
+//     );
+
+//     // Filter users who have last viewed the conversation
+//     const pushedUsers = users.filter((usr) => {
+//       return usr.lastViewedConversationId === conversationId.toString();
+//     });
+
+//     if (conversationDoc.isGroup) {
+//       if (!conversationDoc.members.includes(sender)) {
+//         res.status(401).send();
+//         return;
+//       }
+
+//       // Check if the user is an admin and there are hidden users
+//       const user = await User.findOne({ _id: req.userId });
+//       let newMessageData = { sender, text: encryptedText, conversationId, file };
+//       if (user.isAdmin && hiddenFor && hiddenFor.length > 0) {
+//         const uniqueHiddenFor = Array.from(new Set(hiddenFor));
+//         newMessageData.hiddenFor = uniqueHiddenFor;
+//       } else {
+//         newMessageData.hiddenFor = [];
+//       }
+
+//       // Save the message to the database
+//       const newMsg = await Message.create(newMessageData);
+
+//       // Update conversation document to include sender in readBy array
+//       await Conversation.findOneAndUpdate(
+//         { _id: conversationId },
+//         { $addToSet: { readBy: sender } }
+//       );
+
+//       res.status(201).json(newMsg);
+//     } else {
+//       // Update conversation document to include users who have read the message
+//       conversationDoc.readBy = [];
+//       pushedUsers.map((pUsr) => conversationDoc.readBy.push(pUsr._id.toString()));
+//       await conversationDoc.save();
+
+//       // Save the message to the database
+//       const newMsg = await Message.create({ sender, text: encryptedText, conversationId, file });
+
+//       res.status(201).json(newMsg);
+//     }
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+// prev one
+
+
+
 const getMessagesInsideConversation = async (req, res, next) => {
+
   try {
+
     const { message_id, newer } = req.query;
 
     const conversation = await Conversation.findOne({
@@ -113,15 +198,27 @@ const getMessagesInsideConversation = async (req, res, next) => {
 
     let messages = null;
 
-    // get messages with default paging and message_id and newer
-    if (message_id && newer === undefined) {
-      const message = await Message.findOne({ _id: message_id });
 
+    // get messages with default paging and message_id and newer
+    //////////////////// if ////////////////////////
+    if (message_id && newer === undefined) {
+
+      const message = await Message.findOne({ _id: message_id , hiddenFor: { $ne: req.userId }});
+
+      if (!message) {
+        return res.status(404).json([]);
+      }
+      
       const beforeMessages = await Message.aggregate([
         {
           $match: {
             conversationId: message.conversationId,
             createdAt: { $lt: message.createdAt },
+            hiddenFor: {
+              $not: {
+                $elemMatch: { $eq: new mongoose.Types.ObjectId(req.userId) }
+              }
+            }
           },
         },
         { $sort: { createdAt: -1 } },
@@ -133,6 +230,11 @@ const getMessagesInsideConversation = async (req, res, next) => {
           $match: {
             conversationId: message.conversationId,
             createdAt: { $gt: message.createdAt },
+            hiddenFor: {
+              $not: {
+                $elemMatch: { $eq: new mongoose.Types.ObjectId(req.userId) }
+              }
+            }
           },
         },
         { $sort: { createdAt: 1 } },
@@ -152,10 +254,15 @@ const getMessagesInsideConversation = async (req, res, next) => {
         ...afterMessages,
       ].slice(messageIndex - 5 >= 0 ? messageIndex - 5 : 0, messageIndex + 7);
 
-      // ...
+      //////////////////// else if ////////////////////
     } else if (message_id !== undefined && newer !== undefined) {
-      const message = await Message.findOne({ _id: message_id });
 
+      const message = await Message.findOne({ _id: message_id , hiddenFor: { $ne: req.userId }});
+
+      if (!message) {
+        return res.status(404).json([]);
+      }
+      
       // scroll down
       if (newer === "true") {
         messages = await Message.aggregate([
@@ -163,6 +270,11 @@ const getMessagesInsideConversation = async (req, res, next) => {
             $match: {
               conversationId: message.conversationId,
               createdAt: { $gt: message.createdAt },
+              hiddenFor: {
+                $not: {
+                  $elemMatch: { $eq: new mongoose.Types.ObjectId(req.userId) }
+                }
+              }
             },
           },
           { $sort: { createdAt: 1 } },
@@ -180,6 +292,11 @@ const getMessagesInsideConversation = async (req, res, next) => {
             $match: {
               conversationId: message.conversationId,
               createdAt: { $lt: messageTime },
+              hiddenFor: {
+                $not: {
+                  $elemMatch: { $eq: new mongoose.Types.ObjectId(req.userId) }
+                }
+              }
             },
           },
           { $sort: { createdAt: -1 } },
@@ -188,11 +305,20 @@ const getMessagesInsideConversation = async (req, res, next) => {
 
         messages = messages.slice(0, 10).reverse();
       }
+
+
+    ///////////////////////// else ////////////////////////////
+    // to update the conversation in ui based on latest msg that user recived
     } else {
       const temp = await Message.aggregate([
         {
           $match: {
             conversationId: req.params.conversationId,
+            hiddenFor: {
+              $not: {
+                $elemMatch: { $eq: new mongoose.Types.ObjectId(req.userId) }
+              }
+            }
           },
         },
         { $sort: { createdAt: -1 } },
@@ -204,32 +330,201 @@ const getMessagesInsideConversation = async (req, res, next) => {
 
       // ...
     }
+    
     const users = await Promise.all(
       messages.map((msg) => {
-        // const usr = User.findById(msg.sender);
         return User.findById(msg.sender);
       })
     );
 
-    // console.log(users);
+
     messages = messages.map((msg) => {
       const user = users.find((usr) => {
         return usr._id.toString() === msg.sender;
       });
+
       return {
         ...msg,
         senderUsername: user.username,
         senderAvatar: user.avatar,
       };
+
     });
 
-    //console.log(555588888);
     res.status(200).json(messages);
+
   } catch (error) {
-    //console.log(error);
     next(error);
   }
 };
+
+// const getMessagesInsideConversation = async (req, res, next) => {
+//   try {
+//     const { message_id, newer } = req.query;
+//     const conversationId = req.params.conversationId;
+
+//     const conversation = await Conversation.findOne({
+//       _id: conversationId,
+//     });
+
+//     const updatedUser = await User.updateOne(
+//       { _id: req.userId },
+//       { lastViewedConversationId: conversation._id }
+//     );
+
+//     if (!conversation.readBy.includes(req.userId)) {
+//       conversation.readBy.push(req.userId);
+//     }
+//     await conversation.save();
+
+//     let messages = null;
+
+//     if (message_id && newer === undefined) {
+//       const message = await Message.findOne({ _id: message_id , hiddenFor: { $ne: req.userId }});
+//       if (!message) {
+//         return res.status(404).json([]);
+//       }
+
+//       const beforeMessages = await Message.aggregate([
+//         {
+//           $match: {
+//             conversationId: message.conversationId,
+//             createdAt: { $lt: message.createdAt },
+//             hiddenFor: {
+//               $not: {
+//                 $elemMatch: { $eq: new mongoose.Types.ObjectId(req.userId) }
+//               }
+//             }
+//           },
+//         },
+//         { $sort: { createdAt: -1 } },
+//         { $limit: 20 }, // Fetch more messages than needed
+//       ]);
+
+//       const afterMessages = await Message.aggregate([
+//         {
+//           $match: {
+//             conversationId: message.conversationId,
+//             createdAt: { $gt: message.createdAt },
+//             hiddenFor: {
+//               $not: {
+//                 $elemMatch: { $eq: new mongoose.Types.ObjectId(req.userId) }
+//               }
+//             }
+//           },
+//         },
+//         { $sort: { createdAt: 1 } },
+//         { $limit: 20 }, // Fetch more messages than needed
+//       ]);
+
+//       const messagesArr = [...beforeMessages, message, ...afterMessages];
+
+//       const messageIndex = messagesArr.findIndex((msg) => {
+//         return msg._id === message._id;
+//       });
+
+//       messages = [
+//         ...beforeMessages.reverse(),
+//         message._doc,
+//         ...afterMessages,
+//       ].slice(messageIndex - 5 >= 0 ? messageIndex - 5 : 0, messageIndex + 7);
+
+//     } else if (message_id !== undefined && newer !== undefined) {
+//       const message = await Message.findOne({ _id: message_id , hiddenFor: { $ne: req.userId }});
+//       if (!message) {
+//         return res.status(404).json([]);
+//       }
+      
+//       if (newer === "true") {
+//         messages = await Message.aggregate([
+//           {
+//             $match: {
+//               conversationId: message.conversationId,
+//               createdAt: { $gt: message.createdAt },
+//               hiddenFor: {
+//                 $not: {
+//                   $elemMatch: { $eq: new mongoose.Types.ObjectId(req.userId) }
+//                 }
+//               }
+//             },
+//           },
+//           { $sort: { createdAt: 1 } },
+//           { $limit: 20 }, // Fetch more messages than needed
+//         ]);
+
+//         messages = messages.slice(0, 10);
+//       } else {
+//         const messageTime = new Date(message.createdAt);
+//         messages = await Message.aggregate([
+//           {
+//             $match: {
+//               conversationId: message.conversationId,
+//               createdAt: { $lt: messageTime },
+//               hiddenFor: {
+//                 $not: {
+//                   $elemMatch: { $eq: new mongoose.Types.ObjectId(req.userId) }
+//                 }
+//               }
+//             },
+//           },
+//           { $sort: { createdAt: -1 } },
+//           { $limit: 20 }, // Fetch more messages than needed
+//         ]);
+
+//         messages = messages.slice(0, 10).reverse();
+//       }
+//     } else {
+//       const temp = await Message.aggregate([
+//         {
+//           $match: {
+//             conversationId: req.params.conversationId,
+//             hiddenFor: {
+//               $not: {
+//                 $elemMatch: { $eq: new mongoose.Types.ObjectId(req.userId) }
+//               }
+//             }
+//           },
+//         },
+//         { $sort: { createdAt: -1 } },
+//         { $limit: 20 }, // Fetch more messages than needed
+//       ]);
+
+//       messages = temp.slice(0, 10).reverse();
+//     }
+
+//     const users = await Promise.all(
+//       messages.map((msg) => {
+//         return User.findById(msg.sender);
+//       })
+//     );
+
+//     messages = await Promise.all(messages.map(async (msg) => {
+//       const user = users.find((usr) => {
+//         return usr._id.toString() === msg.sender;
+//       });
+
+//       const decryptedMsg = { ...msg };
+//       if (decryptedMsg.text && decryptedMsg.text.encrypted) {
+//         decryptedMsg.text = await decryptMessage(decryptedMsg.text, decryptionKey);
+//       }
+
+//       return {
+//         ...decryptedMsg,
+//         senderUsername: user.username,
+//         senderAvatar: user.avatar,
+//       };
+//     }));
+
+//     res.status(200).json(messages);
+
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+
+
+
 
 const getUserFilesInsideMessage = async (req, res, next) => {
   const { msgId } = req.params;
@@ -242,6 +537,8 @@ const getUserFilesInsideMessage = async (req, res, next) => {
   }
 };
 
+
+
 const getFile = async (req, res, next) => {
   const { fileId } = req.params;
   try {
@@ -253,7 +550,8 @@ const getFile = async (req, res, next) => {
   }
 };
 
-//should return number of available pages
+
+
 const getBinaryFile = async (req, res, next) => {
   const { fileId, page } = req.query;
 
@@ -331,6 +629,7 @@ const getBinaryFile = async (req, res, next) => {
   }
 };
 
+
 const searchChat = async (req, res, next) => {
   try {
     //console.log(1);
@@ -399,10 +698,13 @@ const searchChat = async (req, res, next) => {
     let groupName = false;
 
     if (userConversation.isGroup) {
+
       const allGroupData = await Group.findOne({
         conversationId: userConversation._id,
       });
+
       groupName = allGroupData?.groupName;
+      
     }
 
     users = users.map((usr) => {
@@ -417,9 +719,11 @@ const searchChat = async (req, res, next) => {
 
     //returned messages : [{_id,sender,text,createdAt}]
     // //console.log(userConversation);
+    /////////ssss
     let messages = await Message.find({
       text: { $regex: searchterm, $options: "i" },
       conversationId: userConversation._id,
+      hiddenFor: { $ne: req.userId }
     })
       .sort({ createdAt: 1 })
       .skip((messagesPage - 1) * 5)
@@ -431,9 +735,11 @@ const searchChat = async (req, res, next) => {
         createdAt: 1,
       });
 
+    /////////ssss
     const fileMessages = await Message.find({
       file: { $ne: null },
       $and: [{ conversationId: userConversation._id }],
+      hiddenFor: { $ne: req.userId }
     })
       .sort({ createdAt: 1 })
       .skip((messagesPage - 1) * 5)
@@ -446,9 +752,13 @@ const searchChat = async (req, res, next) => {
       })
       .select("file");
 
+
+
     const fileMessagesCastedToObjectId = fileMessages.map((fMsg) => {
       return fMsg.file.toString();
     });
+
+
 
     //console.log(fileMessagesCastedToObjectId);
     const searchedFile = await File.find({
@@ -463,8 +773,11 @@ const searchChat = async (req, res, next) => {
       (searchedFileObj) => searchedFileObj._id
     );
 
+
+    /////////ssss
     const searchedFileMessages = await Message.find({
       file: { $in: searchedFileIds },
+      hiddenFor: { $ne: req.userId }
     });
 
     const fileAndMessagesSearchedMerged = searchedFileMessages.map(
@@ -534,6 +847,7 @@ const searchChat = async (req, res, next) => {
   }
 };
 
+
 const updateMessage = async (req, res, next) => {
   try {
     const { conversationId, msgId } = req.params;
@@ -556,12 +870,14 @@ const updateMessage = async (req, res, next) => {
 
     //console.log(message);
     if (message) res.status(200).send();
+
     else res.status(400).send();
+
   } catch (err) {
-    //console.log(err);
     res.status(500).send();
   }
 };
+
 
 const deleteMessage = async (req, res, next) => {
   try {
@@ -578,6 +894,7 @@ const deleteMessage = async (req, res, next) => {
     });
 
     if (message.file) {
+
       const file = await File.findById(message.file);
 
       if (
@@ -587,27 +904,14 @@ const deleteMessage = async (req, res, next) => {
         !file.type.includes("wav") &&
         !file.type.includes("mp4")
       ) {
-        try {
-          fs.rmdirSync(`${staticFolder}\\${file.createdName}`);
-          console.log(`folder deleted successfully`);
-        } catch (error) {
-          console.log(`failed to delete the folder`);
-        }
+        fs.rmdir(`${staticFolder}\\${file?.createdName}`, { recursive: true }, (err) => {
+          if (err) {
+            console.error(`Failed to delete folder: ${err}`);
+          } else {
+            console.log(`Folder deleted successfully.`);
+          }
+        });
       }
-
-      // fs.rmdir(
-      //   ${staticFolder}\\${file.createdName},
-      //   {
-      //     recursive: true,
-      //   },
-      //   (err) => {
-      //     if (err) {
-      //       console.error("Error removing directory:", err);
-      //     } else {
-      //       //console.log("Directory removed successfully.");
-      //     }
-      //   }
-      // );
 
       fs.unlink(`${staticFolder}\\${file.path}.${file.type}`, (err) => {
         if (err) {
@@ -625,12 +929,17 @@ const deleteMessage = async (req, res, next) => {
     const deletedMessage = await Message.deleteOne({ _id: msgId });
 
     if (deletedMessage) res.status(200).send();
+
     else res.status(400).send();
+
   } catch (err) {
     //console.log(err);
     res.status(500).send();
   }
+
 };
+
+
 
 const getFileByAdmin = async (req, res, next) => {
   try {
@@ -668,6 +977,7 @@ const getFileByAdmin = async (req, res, next) => {
     next(error);
   }
 };
+
 
 //API that discards unploaded files
 const discardUserFiles = async (req, res, next) => {
@@ -715,8 +1025,9 @@ const discardUserFiles = async (req, res, next) => {
 
     // 2024-02-01T08:37:21.472+00:00 ,
     // 2024-02-01T08:37:24.622+00:00
-  } catch (err) {}
+  } catch (err) { }
 };
+
 
 const discardUserFile = async (req, res, next) => {
   try {
@@ -747,6 +1058,195 @@ const discardUserFile = async (req, res, next) => {
   }
 };
 
+
+
+const forwardMsg = async (req , res , next) => {
+  try {
+    
+    const {msgId} = req.params
+    const {forwardedConversationsArr , usersForwardedArr} = req.body
+
+    const forwardedMsg = await Message.findById(msgId)
+
+    if (!forwardedMsg) {
+      return res.status(404).json({ success: false, msg: "Forwarded message not found" });
+    }
+
+    if(forwardedMsg.hiddenFor.length > 0) return res.status(400).json({success: false, msg: "you can't Forward a hidden message" })
+    
+    let allForwardedConversations = []
+    
+    // validation check
+    if(!forwardedConversationsArr && !usersForwardedArr) return next(createError(400 , "you must at least choose one conversation or one user"))
+    
+    
+    // forward message for user existing conversations (groups , single chat)
+    let forwardedConversations = []
+    
+    if(forwardedConversationsArr && forwardedConversationsArr.length !== 0){
+      
+      forwardedConversations = await Promise.all(forwardedConversationsArr.map(async (forwardConvId) => {
+        
+        const objectId = new mongoose.Types.ObjectId(forwardConvId);
+
+        try {
+
+          const conversation = await Conversation.findById(objectId)
+          
+          if (!conversation) {
+            return next(createError(404 , `Conversation with ID ${forwardConvId} not found`));
+        }
+
+          if (conversation && conversation.members.includes(req.userId.toString())) {
+            const newMsg = new Message({
+              text : forwardedMsg.text ,
+              file : forwardedMsg.file ,
+              conversationId : conversation._id ,
+              sender : req.userId.toString(),
+              hiddenFor : forwardedMsg.hiddenFor.length > 0 ? forwardedMsg.hiddenFor : [] ,
+              isForwarded : true
+            })
+
+            await newMsg.save()
+
+            allForwardedConversations.push({conversation : conversation , newMsg : newMsg})
+
+            return conversation;
+          }
+          
+        } catch (error) {
+          throw error;
+        }
+      
+      }
+      
+    ))};
+      
+    forwardedConversations = forwardedConversations.filter(singleConver => singleConver !== undefined)
+    
+    
+
+    // forward message for not existing conversations (create new chat)
+    let newCreatedConversations
+
+    if(usersForwardedArr && usersForwardedArr.length !== 0){
+      
+      newCreatedConversations = await Promise.all(usersForwardedArr.map(async (user) => {
+                
+        const existingConversation = await Conversation.findOne({
+          members: { $all: [user , req.userId.toString()] },
+          isGroup: false
+      });
+
+        if(existingConversation){
+          return false
+        }else{
+          const newConversation =  new Conversation({
+            members : [req.userId.toString() , user],
+            isGroup : false ,
+            readBy : []
+          })
+          
+          await newConversation.save()
+
+          const newMsg = new Message({
+            text : forwardedMsg.text ,
+            file : forwardedMsg.file ,
+            conversationId : newConversation._id ,
+            sender : req.userId.toString(),
+            hiddenFor :  forwardedMsg.hiddenFor.length > 0 ? forwardedMsg.hiddenFor : [] ,
+            isForwarded : true
+          })
+          
+          await newMsg.save()
+
+          allForwardedConversations.push({conversation : newConversation , newMsg : newMsg , isForwarded : true})
+          return newConversation
+
+        }
+
+      }))
+    
+    }
+
+    res.status(200).json(allForwardedConversations);
+
+
+  } catch (error) {
+    next(error)
+  }
+}
+
+
+
+
+const favortiteMsg = async (req , res , next) => {
+  try {
+    
+    const message = await Message.findOne({_id : new mongoose.Types.ObjectId(req.params.msgId)})
+    
+    if(!message) return next(createError(404 , "Message not exist"))
+
+    if(message.sender !== req.userId) return next(createError(400 , "You can favortie your messages only"))
+
+    if(message.isFavorite) return next(createError(400 , "already a favorite message"))
+    
+    message.isFavorite = true
+
+    await message.save()
+
+    res.status(200).json(message)
+
+  } catch (error) {
+    next(error)
+  }
+}
+
+
+
+const removeFavoriteMsg = async (req , res , next) => {
+  try {
+
+    const message = await Message.findOne({_id : new mongoose.Types.ObjectId(req.params.msgId)})
+    
+    if(!message) return next(createError(404 , "Message not exist"))
+
+    if(message.sender !== req.userId || !message.isFavorite) return next(createError(400 , "You can't remove favortie from this message"))
+
+    message.isFavorite = false
+    await message.save()
+
+    res.status(200).json(message)
+
+  } catch (error) {
+    next(error)
+  }
+}
+
+
+
+const getAllFavoriteMessages = async (req , res , next) => {
+  try {
+    
+    let favoriteMessages = await Message.find({sender : req.params.userId , conversationId : req.params.convId , isFavorite : true})
+
+    let favoriteFileMessages = favoriteMessages.filter(favMsg => favMsg.file !== null)
+    
+    const favoriteFiles = await Promise.all(favoriteFileMessages.map((fileMsg) => {
+      return File.findOne({_id : fileMsg.file})
+    }))
+
+    favoriteMessages = favoriteMessages.filter(favMsg => favMsg.file === null)
+    
+    res.status(200).json([...favoriteMessages , ...favoriteFiles])
+
+  } catch (error) {
+    next(error)
+  }
+}
+
+
+
 module.exports = {
   newMessage,
   getMessagesInsideConversation,
@@ -759,4 +1259,8 @@ module.exports = {
   getFileByAdmin,
   discardUserFiles,
   discardUserFile,
+  forwardMsg,
+  favortiteMsg,
+  removeFavoriteMsg,
+  getAllFavoriteMessages
 };

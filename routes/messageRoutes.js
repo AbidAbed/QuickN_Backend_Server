@@ -10,7 +10,11 @@ const {
   deleteMessage,
   getFileByAdmin,
   discardUserFiles,
-  discardUserFile,
+  discardUserFile,  
+  forwardMsg, 
+  favortiteMsg,
+  removeFavoriteMsg,
+  getAllFavoriteMessages
 } = require("../controllers/messageControllers");
 const { upload, uploadProfileImg } = require("../middlewares/multer");
 const File = require("../models/fileModel");
@@ -32,6 +36,9 @@ libre.convertAsync = require("util").promisify(libre.convert);
 
 const staticFolder = require("../pathConfig");
 const verifyAdmin = require("../middlewares/verifyAdmin");
+const createError = require("../utils/createError");
+const User = require("../models/userModel");
+const { encryptMessage } = require("../utils/messageEncryption");
 // -----------------------------------------------------
 
 const router = Router();
@@ -39,6 +46,113 @@ const router = Router();
 router.post("/", auth, newMessage);
 
 router.get("/:conversationId", auth, getMessagesInsideConversation);
+
+//////////////////////////////////////////////////////////////////////
+
+router.put("/archiveMsg/:msgId" , auth , async (req , res , next) => {
+  try {
+
+    const {usersInGroup} = req.body
+
+    const msg = await Message.findByIdAndUpdate(req.params.msgId , 
+    {
+      $push : {hiddenFor : usersInGroup}
+    }  
+    , {new : true})
+
+    res.status(200).json(msg)
+
+  } catch (error) {
+    next(error)
+  }
+})
+
+
+router.put("/resetArchivedMsg/:msgId" , auth , async (req , res , next) => {
+  try {
+
+    const {usersInGroup} = req.body
+
+    const msg = await Message.findById(req.params.msgId)
+
+    if(!msg) {
+      return next(createError(404 , "Message not exist"))
+    }
+
+    msg.hiddenFor = []
+
+    await msg.save()
+
+    res.status(200).json(msg)
+
+  } catch (error) {
+    next(error)
+  }
+})
+
+
+router.put("/hidePrevMsg/:msgId" , auth , async (req , res , next) => {
+  try {
+   
+    const {msgId} = req.params
+    const {hiddenArr} = req.body
+
+    const msg = await Message.findById(msgId)
+
+    if(!msg){
+      return next(createError(404 , "Message not exist"))
+    }
+
+    const user = await User.findById(req.userId)
+
+    if(!user || !user.isAdmin) return next(createError(401 , "Access denied"))
+
+    if(hiddenArr.length === 0) return next(createError(400 , "you must at least provide one member"))
+
+    const updatedMsg = await Message.findByIdAndUpdate(msgId , {
+      $addToSet : {hiddenFor : hiddenArr}
+    } , {new : true})
+
+    res.status(200).json(updatedMsg)
+
+  } catch (error) {
+    next(error)
+  }
+})
+
+
+router.put("/resetHiddenMsg/:msgId" , auth  , async (req , res , next) => {
+  try {
+    
+    const {msgId} = req.params
+
+    const msg = await Message.findById(msgId)
+
+    if(!msg) return next(createError(404 , "Message not exist"))
+    
+    const user = await User.findById(req.userId)
+
+    if(!user || !user.isAdmin) return next(createError(401 , "Access Denied"))
+
+    if(msg.hiddenFor.length === 0) return next(createError(400 , "not a hidden message"))
+  
+    msg.hiddenFor = []
+
+    await msg.save()
+
+    res.status(200).json(msg)
+
+  } catch (error) {
+    next(error)
+  }
+})
+
+
+router.post("/forwardMsg/:msgId" , auth , forwardMsg)
+
+
+///////////////////////////////////////////////////////////////////////
+
 
 router.post("/createFileObj", auth, async (req, res, next) => {
   try {
@@ -65,6 +179,7 @@ router.post("/createFileObj", auth, async (req, res, next) => {
   }
 });
 
+
 router.post("/upload", auth, upload.single("file"), async (req, res, next) => {
   // let filename = req.file.originalname === "blob" ? req.file.originalname = req.file.originalname + Math.floor(Math.random() * 100) + ".wav" : req.file.originalname
   // let path = req.file.originalname.includes("blob") ? req.file.path = `public/images/${filename}` : req.file.path
@@ -81,13 +196,16 @@ router.post("/upload", auth, upload.single("file"), async (req, res, next) => {
 
       setTimeout(async () => {
         isCanceled = true;
-        const file = await File.findOneAndUpdate(
-          { _id: req.body.fileId },
-          { isUploaded: false, isUploading: false }
-        );
+        const file = await File.findOne({ _id: req.body.fileId });
+        if (file?.isUploading) {
+          await File.findOneAndUpdate(
+            { _id: req.body.fileId },
+            { isUploaded: false, isUploading: false }
+          );
+        }
         res.status(400).send();
         next();
-      }, 1000);
+      }, process.env.SET_TIME_OUT_LIMIT);
 
       let numberOfPages = 0;
       if (
@@ -267,24 +385,8 @@ router.post("/upload", auth, upload.single("file"), async (req, res, next) => {
     res.status(500).send();
   }
 
-  //   const file = {
-  //     filename: req.file.originalname,
-  //     path: req.file.path,
-  //   };
-
-  //   // //console.log(filename)
-  //   // //console.log(path)
-
-  //   try {
-  //     const newFile = new File(file);
-
-  //     await newFile.save();
-
-  //     res.status(201).json(newFile);
-  //   } catch (error) {
-  //     next(error);
-  //   }
 });
+
 
 //might need edit
 router.post(
@@ -329,24 +431,26 @@ router.get("/admin/file/:fileId", verifyAdmin, getFileByAdmin);
 //Discards files that the user has uploaded but didn't upload successfully
 router.delete("/file/uploading/discard", discardUserFiles);
 
-// router.delete("/deleteAllMsg" , async (req , res , next) => {
-//     try {
-//         await Message.deleteMany()
-//         res.status(200).json({msg : "deleted"})
-//     } catch (error) {
-//         next(error)
-//     }
-// })
-
-// router.delete("/deleteChatFiles" , async (req , res , next) => {
-//     try {
-//         await File.deleteMany()
-//     } catch (error) {
-//         next(error)
-//     }
-// })
-
 router.delete("/file/singleFile/uploading/discard", discardUserFile);
-router.get("/users/search", auth, searchChat);
 
+router.get("/users/search", auth , searchChat);
+
+router.patch("/favortite-msg/:msgId" , auth , favortiteMsg)
+
+router.patch("/remove-favorite-msg/:msgId" , auth , removeFavoriteMsg)
+
+router.get("/get-favorite-messages/:userId/:convId" , auth , getAllFavoriteMessages)
+
+// router.post('/encrypt-message', async (req, res) => {
+//   const { message } = req.body; 
+//   try {
+//     const encryptedMessage = await encryptMessage(message);
+//     res.json({ encryptedMessage });
+//   } catch (error) {
+//     console.error('Encryption failed:', error);
+//     res.status(500).json({ error: 'Encryption failed' });
+//   }
+// });
+
+ 
 module.exports = router;
